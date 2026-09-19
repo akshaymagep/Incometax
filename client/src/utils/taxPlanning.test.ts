@@ -7,6 +7,7 @@ function fakeComparison(taxableIncomeSlabPortion: number): ComparisonResult {
     regime: "old" as const,
     grossTotalIncome: 0,
     standardDeduction: 0,
+    professionalTaxDeduction: 0,
     totalDeductionsClaimed: 0,
     hraExemption: 0,
     taxableIncome: taxableIncomeSlabPortion,

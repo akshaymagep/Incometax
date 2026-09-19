@@ -14,6 +14,7 @@ function blankProfile(overrides: Partial<TaxProfile> = {}): TaxProfile {
       isMetro: false,
       otherAllowances: 0,
       employerNpsContribution: 0,
+      professionalTax: 0,
     },
     houseProperty: {
       isSelfOccupied: true,
@@ -23,7 +24,7 @@ function blankProfile(overrides: Partial<TaxProfile> = {}): TaxProfile {
     },
     capitalGains: { stcgEquity: 0, ltcgEquity: 0, stcgOther: 0, ltcgOther: 0 },
     otherSources: { savingsInterest: 0, fdInterest: 0, dividendIncome: 0, otherIncome: 0 },
-    business: { netProfit: 0 },
+    business: { netProfit: 0, presumptiveScheme: "none", turnoverOrGrossReceipts: 0, digitalReceiptsMostly: false },
     deductions: {
       section80C: 0,
       section80CCD1B: 0,
@@ -50,6 +51,7 @@ describe("calcHRAExemption", () => {
       isMetro: true,
       otherAllowances: 0,
       employerNpsContribution: 0,
+      professionalTax: 0,
     };
     expect(calcHRAExemption(salary)).toBe(0);
   });
@@ -62,6 +64,7 @@ describe("calcHRAExemption", () => {
       isMetro: true,
       otherAllowances: 0,
       employerNpsContribution: 0,
+      professionalTax: 0,
     };
     // least(240000 received, 240000 excess rent, 300000 @ 50%) = 240000
     expect(calcHRAExemption(salary)).toBe(240000);
@@ -75,6 +78,7 @@ describe("calcHRAExemption", () => {
       isMetro: false,
       otherAllowances: 0,
       employerNpsContribution: 0,
+      professionalTax: 0,
     };
     expect(calcHRAExemption(salary)).toBe(240000);
   });
@@ -98,6 +102,7 @@ describe("computeRegime - old regime rebate under Sec 87A", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
     });
     // gross salary 550000 - std ded 50000 = 500000 taxable
@@ -116,6 +121,7 @@ describe("computeRegime - old regime rebate under Sec 87A", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
     });
     // taxable salary = 600000; tax = 0 (2.5L) + 5%*2.5L = 12500; no rebate (>5L)
@@ -136,6 +142,7 @@ describe("computeRegime - new regime rebate under Sec 87A", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
     });
     // gross 775000 - std ded 75000 = 700000
@@ -155,6 +162,7 @@ describe("computeRegime - deductions only apply in old regime", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
       deductions: {
         section80C: 150000,
@@ -209,6 +217,7 @@ describe("computeRegime - self-occupied home loan interest", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
     });
     const result = computeRegime(profile, "old");
@@ -231,10 +240,48 @@ describe("computeRegime - self-occupied home loan interest", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
     });
     const result = computeRegime(profile, "new");
     expect(result.taxableIncomeSlabPortion).toBe(1500000 - 75000);
+  });
+});
+
+describe("computeRegime - professional tax (Sec 16(iii))", () => {
+  it("deducts professional tax from taxable salary under the old regime", () => {
+    const profile = blankProfile({
+      salary: {
+        basicPlusDA: 600000,
+        hraReceived: 0,
+        rentPaid: 0,
+        isMetro: false,
+        otherAllowances: 0,
+        employerNpsContribution: 0,
+        professionalTax: 2500,
+      },
+    });
+    const result = computeRegime(profile, "old");
+    // 600000 - 50000 (std ded) - 2500 (professional tax) = 547500
+    expect(result.taxableIncomeSlabPortion).toBe(547500);
+    expect(result.professionalTaxDeduction).toBe(2500);
+  });
+
+  it("does not deduct professional tax under the new regime", () => {
+    const profile = blankProfile({
+      salary: {
+        basicPlusDA: 600000,
+        hraReceived: 0,
+        rentPaid: 0,
+        isMetro: false,
+        otherAllowances: 0,
+        employerNpsContribution: 0,
+        professionalTax: 2500,
+      },
+    });
+    const result = computeRegime(profile, "new");
+    expect(result.taxableIncomeSlabPortion).toBe(600000 - 75000);
+    expect(result.professionalTaxDeduction).toBe(0);
   });
 });
 
@@ -248,6 +295,7 @@ describe("compareRegimes", () => {
         isMetro: false,
         otherAllowances: 0,
         employerNpsContribution: 0,
+        professionalTax: 0,
       },
       deductions: {
         section80C: 150000,

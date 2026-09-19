@@ -10,8 +10,7 @@ guidance.
 > e-filing portal and not a substitute for a qualified chartered accountant. It does not submit
 > anything to the government. Several simplifications are documented in
 > `server/src/services/taxEngine.ts` (no surcharge marginal relief, no indexation on capital
-> assets acquired before 23-Jul-2024, no presumptive taxation schemes). Always verify your final
-> numbers before filing.
+> assets acquired before 23-Jul-2024). Always verify your final numbers before filing.
 
 ## Architecture
 
@@ -33,14 +32,23 @@ Incometax/
   context so answers and deduction suggestions are specific to them.
 - **Frontend** (`client/src`): a guided flow (Personal Info → Income → Deductions → Summary) plus
   a floating chat widget available on every page.
-- **Filing export** (`server/src/services/itrExport.ts`, "Filing export" section on the Summary
-  page): generates
+- **ITR-1 through ITR-4** (`server/src/services/itrExport.ts`'s `determineApplicableForm`): the app
+  works out which form applies from what you've entered — ITR-1 (simple salaried), ITR-2 (adds
+  capital gains, or a non-resident), ITR-3 (business/professional income with regular books of
+  account, or presumptive income outside its limits), or ITR-4/Sugam (presumptive business under
+  Section 44AD, or professional income under 44ADA, within the turnover limits and minimum-profit
+  requirement). The Income page's Business/Profession section includes a presumptive-scheme
+  calculator (turnover, digital-receipts toggle, minimum profit required) that feeds this directly.
+- **Filing export** ("Filing export" section on the Summary page): generates
   1. a **filing worksheet** (JSON) that organizes your numbers under the same schedule names the
-     ITR forms and e-filing portal use (Schedule S/HP/CG/OS/VI-A, Part B-TI/TTI), for fast, correct
-     transcription into the portal or offline utility — always safe to generate; and
-  2. for simple resident-salaried profiles (no capital gains, no business income, income routed
-     through ITR-1), a **best-effort draft ITR-1 JSON** shaped like the offline utility's schema.
-     This draft is explicitly labeled experimental: the Department's exact schema (including a
+     ITR forms and e-filing portal use (Schedule S/HP/CG/OS/VI-A/BP, Part B-TI/TTI) for whichever
+     form applies — always safe to generate, for all four forms; and
+  2. for the two simplest forms — **ITR-1** (simple salaried) and **ITR-4** (presumptive
+     business/professional) — a **best-effort draft JSON** shaped like the offline utility's
+     schema. ITR-2 and ITR-3 deliberately don't get this draft: their real schemas carry
+     asset-wise capital-gains detail, foreign-asset schedules, and audit particulars this app
+     doesn't collect, so guessing at them risks a confidently-wrong file. Whichever draft is
+     offered is explicitly labeled experimental: the Department's exact schema (including a
      proprietary checksum/digest block) changes every assessment year and isn't reproduced here,
      so **do not upload it directly** — use it to cross-check figures against what you enter in
      the official utility or portal.
@@ -54,6 +62,15 @@ Incometax/
   your return. It runs entirely in the browser — nothing is uploaded to the server. Importing data
   that reveals a new income type (e.g. capital gains) immediately updates the recommended ITR form
   once saved.
+- **Form 16 import** (`client/src/utils/form16Parser.ts`, "Import from your Form 16" panel on the
+  Income page): Form 16 Part B is issued directly by your employer and reports gross salary,
+  Section 16 deductions (professional tax), and the Chapter VI-A deductions your employer applied,
+  plus total TDS. Paste the text or upload it and the app detects and lets you selectively apply
+  those figures — same review-before-apply UX as the AIS importer, same "runs entirely in your
+  browser" guarantee. Only fields with an unambiguous mapping are offered (professional tax, 80C,
+  80CCD(1B), 80D, TDS); gross salary is offered too but flagged, since Form 16 reports one combined
+  salary figure rather than this app's Basic+DA/HRA/other-allowances split used for its own HRA
+  exemption calculation.
 - **Tax Planning** (`client/src/pages/TaxPlanning.tsx`, `client/src/utils/taxPlanning.ts`, `/planning`
   route): a forward-looking section with
   1. remaining headroom in 80C/80CCD(1B)/80D against this year's statutory caps, and the

@@ -150,14 +150,32 @@ function FilingExportSection() {
                 Download draft ITR-1 JSON (experimental)
               </button>
             )}
+            {result.draftItr4 && (
+              <button
+                onClick={() => downloadJson(`draft-itr4-${financialYear}.json`, result.draftItr4)}
+                className="rounded-md border border-amber-400 text-amber-700 dark:text-amber-400 px-4 py-2 text-sm font-medium hover:bg-amber-50 dark:hover:bg-slate-700"
+              >
+                Download draft ITR-4 JSON (experimental)
+              </button>
+            )}
           </div>
 
-          {result.draftItr1 && (
+          {(result.draftItr1 || result.draftItr4) && (
             <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-slate-900 rounded-md p-3">
-              The draft ITR-1 JSON approximates the offline utility's structure but is <strong>not guaranteed</strong>{" "}
-              to match the current assessment year's exact schema or pass the utility's validation. Treat it as a
-              cross-check of your numbers, not a ready-to-upload file — build the real submission using the official
-              portal or offline utility.
+              The draft {result.draftItr1 ? "ITR-1" : "ITR-4"} JSON approximates the offline utility's structure but
+              is <strong>not guaranteed</strong> to match the current assessment year's exact schema or pass the
+              utility's validation. Treat it as a cross-check of your numbers, not a ready-to-upload file — build the
+              real submission using the official portal or offline utility.
+            </p>
+          )}
+
+          {!result.draftItr1 && !result.draftItr4 && (
+            <p className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 rounded-md p-3">
+              {result.applicability.form} is complex enough that we'd rather not guess: it has schedules (detailed
+              capital-gains asset-wise entries, foreign assets, quarter-wise breakups, tax-audit particulars) that
+              vary by case and that we don't collect, so an experimental JSON draft could easily be wrong in ways
+              that are hard to spot. The filing worksheet above still has every figure organized by schedule name —
+              use it to fill the official portal or offline utility directly.
             </p>
           )}
         </div>
@@ -204,9 +222,11 @@ export function Summary() {
 
       <div className="mt-8 text-xs text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-4">
         This computation is a simplified planning estimate for FY 2024-25 (AY 2025-26). It does not account for
-        marginal relief on surcharge, indexation on pre-July 2024 capital assets, or presumptive taxation schemes.
-        Always verify with the official Income Tax Department utility or a qualified chartered accountant before
-        filing.
+        marginal relief on surcharge or indexation on capital assets acquired before 23-Jul-2024. Presumptive
+        taxation (Section 44AD/44ADA) is supported for ITR-form selection and the minimum-profit calculator, but
+        the underlying computation still treats declared net profit as a single figure — it doesn't model 44AE
+        (transport) or partial-year presumptive scenarios. Always verify with the official Income Tax Department
+        utility or a qualified chartered accountant before filing.
       </div>
     </div>
   );

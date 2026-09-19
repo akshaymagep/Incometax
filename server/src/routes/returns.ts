@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
-import { buildDraftItr1, buildFilingWorksheet, determineApplicableForm } from "../services/itrExport.js";
+import { buildDraftItr1, buildDraftItr4, buildFilingWorksheet, determineApplicableForm } from "../services/itrExport.js";
 import { compareRegimes } from "../services/taxEngine.js";
 import type { TaxProfile } from "../types.js";
 
@@ -29,6 +29,7 @@ const taxProfileSchema = z.object({
     isMetro: z.boolean(),
     otherAllowances: num(),
     employerNpsContribution: num(),
+    professionalTax: num(),
   }),
   houseProperty: z.object({
     isSelfOccupied: z.boolean(),
@@ -48,7 +49,12 @@ const taxProfileSchema = z.object({
     dividendIncome: num(),
     otherIncome: num(),
   }),
-  business: z.object({ netProfit: num() }),
+  business: z.object({
+    netProfit: num(),
+    presumptiveScheme: z.enum(["none", "44AD", "44ADA"]),
+    turnoverOrGrossReceipts: num(),
+    digitalReceiptsMostly: z.boolean(),
+  }),
   deductions: z.object({
     section80C: num(),
     section80CCD1B: num(),
@@ -132,11 +138,12 @@ returnsRouter.get("/:financialYear/export", (req: AuthedRequest, res) => {
 
   const profile = JSON.parse(row.profile_json) as TaxProfile;
   const comparison = compareRegimes(profile);
-  const applicability = determineApplicableForm(profile);
+  const applicability = determineApplicableForm(profile, comparison);
   const worksheet = buildFilingWorksheet(profile, comparison);
   const draftItr1 = buildDraftItr1(profile, comparison);
+  const draftItr4 = buildDraftItr4(profile, comparison);
 
-  res.json({ applicability, worksheet, draftItr1 });
+  res.json({ applicability, worksheet, draftItr1, draftItr4 });
 });
 
 returnsRouter.delete("/:financialYear", (req: AuthedRequest, res) => {

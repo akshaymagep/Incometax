@@ -1,4 +1,4 @@
-import type { ComparisonResult, RegimeResult, TaxProfile } from "../types.js";
+import type { BusinessIncome, ComparisonResult, RegimeResult, TaxProfile } from "../types.js";
 import { computeSalaryHead } from "./taxEngine.js";
 
 /**
@@ -19,25 +19,90 @@ import { computeSalaryHead } from "./taxEngine.js";
  *    relying on it.
  */
 
-export type ApplicableForm = "ITR-1" | "ITR-2" | "ITR-3";
+export type ApplicableForm = "ITR-1" | "ITR-2" | "ITR-3" | "ITR-4";
 
 export interface FormApplicability {
   form: ApplicableForm;
   reasons: string[];
 }
 
-export function determineApplicableForm(profile: TaxProfile): FormApplicability {
+export interface PresumptiveDetails {
+  scheme: "44AD" | "44ADA";
+  rate: number;
+  turnoverLimit: number;
+  minimumPresumptiveProfit: number;
+  withinTurnoverLimit: boolean;
+  meetsMinimumProfit: boolean;
+}
+
+/** Section 44AD (business) / 44ADA (profession) presumptive-scheme math, used both for ITR-4
+ * eligibility and to help the user see the minimum profit they'd need to declare. */
+export function computePresumptiveDetails(business: BusinessIncome): PresumptiveDetails | null {
+  if (business.presumptiveScheme === "none") return null;
+  const digital = business.digitalReceiptsMostly;
+  const scheme = business.presumptiveScheme;
+  const rate = scheme === "44AD" ? (digital ? 0.06 : 0.08) : 0.5;
+  const turnoverLimit = scheme === "44AD" ? (digital ? 30000000 : 20000000) : digital ? 7500000 : 5000000;
+  const minimumPresumptiveProfit = Math.round(business.turnoverOrGrossReceipts * rate);
+  return {
+    scheme,
+    rate,
+    turnoverLimit,
+    minimumPresumptiveProfit,
+    withinTurnoverLimit: business.turnoverOrGrossReceipts > 0 && business.turnoverOrGrossReceipts <= turnoverLimit,
+    meetsMinimumProfit: business.netProfit >= minimumPresumptiveProfit,
+  };
+}
+
+const ITR4_TOTAL_INCOME_LIMIT = 5000000; // Sec 44AD/44ADA (Sugam) eligibility caps total income at Rs.50 lakh
+
+export function determineApplicableForm(profile: TaxProfile, comparison?: ComparisonResult): FormApplicability {
   const reasons: string[] = [];
   const hasCapitalGains =
     profile.capitalGains.stcgEquity > 0 ||
     profile.capitalGains.ltcgEquity > 0 ||
     profile.capitalGains.stcgOther > 0 ||
     profile.capitalGains.ltcgOther > 0;
-  const hasBusinessIncome = profile.business.netProfit !== 0;
+  const hasBusinessIncome = profile.business.netProfit !== 0 || profile.business.turnoverOrGrossReceipts > 0;
   const isNonResident = profile.personalInfo.residentialStatus !== "resident";
 
   if (hasBusinessIncome) {
-    reasons.push("Business/professional income was entered — ITR-1/2 don't cover this head.");
+    if (hasCapitalGains) {
+      reasons.push(
+        "Business/professional income together with capital gains requires ITR-3 — ITR-4 doesn't cover capital gains."
+      );
+      return { form: "ITR-3", reasons };
+    }
+    if (isNonResident) {
+      reasons.push("ITR-4 is only available to resident individuals — ITR-3 applies instead.");
+      return { form: "ITR-3", reasons };
+    }
+    const presumptive = computePresumptiveDetails(profile.business);
+    const totalIncome = comparison ? comparison[comparison.recommended].grossTotalIncome : undefined;
+    const withinIncomeLimit = totalIncome === undefined || totalIncome <= ITR4_TOTAL_INCOME_LIMIT;
+    if (presumptive && presumptive.withinTurnoverLimit && presumptive.meetsMinimumProfit && withinIncomeLimit) {
+      reasons.push(
+        `Presumptive taxation under Section ${presumptive.scheme} was selected, within the ₹${presumptive.turnoverLimit.toLocaleString(
+          "en-IN"
+        )} turnover limit, with declared profit at or above the ${Math.round(presumptive.rate * 100)}% minimum.`
+      );
+      return { form: "ITR-4", reasons };
+    }
+    if (presumptive && !presumptive.withinTurnoverLimit) {
+      reasons.push(
+        `Turnover/receipts exceed the Section ${presumptive.scheme} presumptive limit — ITR-3 (with regular books of account) applies instead.`
+      );
+    } else if (presumptive && !presumptive.meetsMinimumProfit) {
+      reasons.push(
+        `Declared profit is below the Section ${presumptive.scheme} minimum (${Math.round(
+          presumptive.rate * 100
+        )}% of turnover/receipts) — presumptive taxation doesn't apply, so ITR-3 (with regular books of account) applies instead.`
+      );
+    } else if (!withinIncomeLimit) {
+      reasons.push("Total income exceeds ₹50 lakh — ITR-4 (Sugam) isn't available above that threshold.");
+    } else {
+      reasons.push("Business/professional income was entered without opting for presumptive taxation.");
+    }
     return { form: "ITR-3", reasons };
   }
   if (hasCapitalGains) {
@@ -87,6 +152,25 @@ function regimeWorksheet(result: RegimeResult, profile: TaxProfile) {
       otherIncome: profile.otherSources.otherIncome,
       deduction80TTA_80TTB: result.regime === "old" ? undefined : 0,
     },
+    scheduleBP_BusinessOrProfession:
+      profile.business.netProfit !== 0 || profile.business.turnoverOrGrossReceipts > 0
+        ? (() => {
+            const presumptive = computePresumptiveDetails(profile.business);
+            return {
+              declaredNetProfit: profile.business.netProfit,
+              presumptiveScheme: profile.business.presumptiveScheme,
+              turnoverOrGrossReceipts: profile.business.turnoverOrGrossReceipts,
+              ...(presumptive
+                ? {
+                    presumptiveRatePct: Math.round(presumptive.rate * 100),
+                    minimumPresumptiveProfit: presumptive.minimumPresumptiveProfit,
+                    withinTurnoverLimit: presumptive.withinTurnoverLimit,
+                    meetsMinimumProfit: presumptive.meetsMinimumProfit,
+                  }
+                : {}),
+            };
+          })()
+        : undefined,
     scheduleVIA_ChapterVIADeductions:
       result.regime === "old"
         ? {
@@ -119,7 +203,7 @@ function regimeWorksheet(result: RegimeResult, profile: TaxProfile) {
 }
 
 export function buildFilingWorksheet(profile: TaxProfile, comparison: ComparisonResult) {
-  const applicability = determineApplicableForm(profile);
+  const applicability = determineApplicableForm(profile, comparison);
   return {
     disclaimer:
       "This worksheet organizes your figures under the same schedule names used on the e-filing portal " +
@@ -149,7 +233,7 @@ export function buildFilingWorksheet(profile: TaxProfile, comparison: Comparison
  * comment: treat this as a reference draft, not a guaranteed-valid portal upload file.
  */
 export function buildDraftItr1(profile: TaxProfile, comparison: ComparisonResult) {
-  const applicability = determineApplicableForm(profile);
+  const applicability = determineApplicableForm(profile, comparison);
   if (applicability.form !== "ITR-1") {
     return null;
   }
@@ -190,6 +274,95 @@ export function buildDraftItr1(profile: TaxProfile, comparison: ComparisonResult
           StandardDeduction: salaryHead.standardDeduction,
           IncomeFromSal: salaryHead.taxableSalary,
           TypeOfHP: profile.houseProperty.isSelfOccupied ? "Self-Occupied" : "Let-Out",
+          IncomeOthSrc:
+            profile.otherSources.savingsInterest +
+            profile.otherSources.fdInterest +
+            profile.otherSources.dividendIncome +
+            profile.otherSources.otherIncome,
+          GrossTotIncome: result.grossTotalIncome,
+          UsrDeductUndChapVIA: result.regime === "old" ? result.totalDeductionsClaimed : 0,
+          TotalIncome: result.taxableIncome,
+        },
+        TaxComputation: {
+          TaxOnTotalIncome: result.taxOnSlabIncome,
+          Rebate87A: result.rebate87A,
+          Surcharge: result.surcharge,
+          HealthEduCess: result.cess,
+          GrossTaxLiability: result.totalTaxLiability,
+        },
+        TaxPaid: {
+          TDS: profile.tdsAlreadyPaid,
+          AdvanceTax: profile.advanceTaxPaid,
+          TotalTaxesPaid: result.taxesPaid,
+        },
+        Refund: {
+          RefundDue: result.balancePayableOrRefund < 0 ? Math.abs(result.balancePayableOrRefund) : 0,
+        },
+        BalanceTaxPayable: {
+          BalTaxPayable: result.balancePayableOrRefund > 0 ? result.balancePayableOrRefund : 0,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Best-effort, ITR-4 (Sugam)-shaped draft JSON for presumptive business/professional income
+ * (Section 44AD/44ADA) combined with salary/house-property/other-sources income. Same caveats as
+ * `buildDraftItr1` — a reference draft, not a guaranteed-valid portal upload file.
+ */
+export function buildDraftItr4(profile: TaxProfile, comparison: ComparisonResult) {
+  const applicability = determineApplicableForm(profile, comparison);
+  if (applicability.form !== "ITR-4") {
+    return null;
+  }
+  const result = comparison[comparison.recommended];
+  const salaryHead = computeSalaryHead(profile.salary, result.regime);
+  const presumptive = computePresumptiveDetails(profile.business);
+  const assessmentYear = `${Number(profile.financialYear.split("-")[0]) + 1}`;
+
+  return {
+    _disclaimer:
+      "DRAFT / REFERENCE ONLY. This file approximates the structure of the Income Tax Department's ITR-4 " +
+      "(Sugam) offline-utility JSON from public knowledge of past schemas, but the department's exact schema " +
+      "and internal validation (including checksum/digest fields) can change every assessment year and are " +
+      "not reproduced here. Do not upload this file directly to the e-filing portal without first validating " +
+      "it against the current year's offline utility — import your numbers into the official utility (or the " +
+      "online portal) and use this file only as a cross-check of the figures.",
+    ITR: {
+      ITR4: {
+        Form_ITR4: {
+          FormName: "ITR-4 (Sugam)",
+          Description:
+            "For resident individuals/HUF/firms (other than LLP) with presumptive business/professional income under Section 44AD/44ADA/44AE, total income up to Rs.50 lakh",
+          AssessmentYear: assessmentYear,
+        },
+        PartA_GEN: {
+          PersonalInfo: {
+            AssesseeName: profile.personalInfo.fullName || undefined,
+            PAN: profile.personalInfo.pan || undefined,
+            DOB: profile.personalInfo.dateOfBirth || undefined,
+          },
+          FilingStatus: {
+            ResidentialStatus: profile.personalInfo.residentialStatus,
+            OptingRegime: comparison.recommended === "new" ? "New Regime u/s 115BAC" : "Old Regime",
+          },
+        },
+        ScheduleBP_PresumptiveIncome: {
+          Section: presumptive?.scheme,
+          GrossTurnoverOrReceipts: profile.business.turnoverOrGrossReceipts,
+          PresumptiveRatePct: presumptive ? Math.round(presumptive.rate * 100) : undefined,
+          MinimumPresumptiveProfit: presumptive?.minimumPresumptiveProfit,
+          DeclaredProfit: profile.business.netProfit,
+        },
+        IncomeDeductions: {
+          GrossSalary: salaryHead.grossSalary,
+          AllowancesExemptUs10: salaryHead.hraExemption,
+          Section80CCD2: salaryHead.section80CCD2,
+          StandardDeduction: salaryHead.standardDeduction,
+          IncomeFromSal: salaryHead.taxableSalary,
+          TypeOfHP: profile.houseProperty.isSelfOccupied ? "Self-Occupied" : "Let-Out",
+          PresumptiveBusinessIncome: profile.business.netProfit,
           IncomeOthSrc:
             profile.otherSources.savingsInterest +
             profile.otherSources.fdInterest +

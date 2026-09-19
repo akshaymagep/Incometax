@@ -15,6 +15,7 @@ export interface SalaryIncome {
   isMetro: boolean;
   otherAllowances: number;
   employerNpsContribution: number;
+  professionalTax: number;
 }
 
 export interface HouseProperty {
@@ -38,8 +39,13 @@ export interface OtherSources {
   otherIncome: number;
 }
 
+export type PresumptiveScheme = "none" | "44AD" | "44ADA";
+
 export interface BusinessIncome {
   netProfit: number;
+  presumptiveScheme: PresumptiveScheme;
+  turnoverOrGrossReceipts: number;
+  digitalReceiptsMostly: boolean;
 }
 
 export interface Deductions {
@@ -72,6 +78,7 @@ export interface RegimeResult {
   regime: "old" | "new";
   grossTotalIncome: number;
   standardDeduction: number;
+  professionalTaxDeduction: number;
   totalDeductionsClaimed: number;
   hraExemption: number;
   taxableIncome: number;
@@ -96,7 +103,7 @@ export interface ComparisonResult {
 }
 
 export interface FormApplicability {
-  form: "ITR-1" | "ITR-2" | "ITR-3";
+  form: "ITR-1" | "ITR-2" | "ITR-3" | "ITR-4";
   reasons: string[];
 }
 
@@ -104,6 +111,7 @@ export interface FilingExport {
   applicability: FormApplicability;
   worksheet: Record<string, unknown>;
   draftItr1: Record<string, unknown> | null;
+  draftItr4: Record<string, unknown> | null;
 }
 
 export function blankTaxProfile(financialYear: string): TaxProfile {
@@ -118,6 +126,7 @@ export function blankTaxProfile(financialYear: string): TaxProfile {
       isMetro: false,
       otherAllowances: 0,
       employerNpsContribution: 0,
+      professionalTax: 0,
     },
     houseProperty: {
       isSelfOccupied: true,
@@ -127,7 +136,7 @@ export function blankTaxProfile(financialYear: string): TaxProfile {
     },
     capitalGains: { stcgEquity: 0, ltcgEquity: 0, stcgOther: 0, ltcgOther: 0 },
     otherSources: { savingsInterest: 0, fdInterest: 0, dividendIncome: 0, otherIncome: 0 },
-    business: { netProfit: 0 },
+    business: { netProfit: 0, presumptiveScheme: "none", turnoverOrGrossReceipts: 0, digitalReceiptsMostly: false },
     deductions: {
       section80C: 0,
       section80CCD1B: 0,

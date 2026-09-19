@@ -15,6 +15,7 @@ export interface SalaryIncome {
   isMetro: boolean;
   otherAllowances: number;
   employerNpsContribution: number; // 80CCD(2)
+  professionalTax: number; // Section 16(iii), old regime only
 }
 
 export interface HouseProperty {
@@ -38,8 +39,13 @@ export interface OtherSources {
   otherIncome: number;
 }
 
+export type PresumptiveScheme = "none" | "44AD" | "44ADA";
+
 export interface BusinessIncome {
   netProfit: number;
+  presumptiveScheme: PresumptiveScheme;
+  turnoverOrGrossReceipts: number; // used only when presumptiveScheme !== "none"
+  digitalReceiptsMostly: boolean; // >=95% received via banking/digital channels — raises 44AD turnover limit & lowers its rate
 }
 
 export interface Deductions {
@@ -72,6 +78,7 @@ export interface RegimeResult {
   regime: "old" | "new";
   grossTotalIncome: number;
   standardDeduction: number;
+  professionalTaxDeduction: number;
   totalDeductionsClaimed: number;
   hraExemption: number;
   taxableIncome: number;

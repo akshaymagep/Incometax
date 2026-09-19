@@ -116,7 +116,8 @@ export interface SalaryHeadResult {
   hraExemption: number;
   section80CCD2: number;
   standardDeduction: number;
-  /** "Income chargeable under the head Salaries" — after HRA exemption, 80CCD(2) and standard deduction. */
+  professionalTaxDeduction: number;
+  /** "Income chargeable under the head Salaries" — after HRA exemption, 80CCD(2), standard deduction, and professional tax. */
   taxableSalary: number;
 }
 
@@ -127,18 +128,20 @@ export function computeSalaryHead(salary: SalaryIncome, regime: "old" | "new"): 
   const npsCap = (regime === "new" ? 0.14 : 0.1) * salary.basicPlusDA;
   const section80CCD2 = Math.min(salary.employerNpsContribution, npsCap);
   const standardDeduction = grossSalary > 0 ? (regime === "new" ? 75000 : 50000) : 0;
-  const taxableSalary = clampMin0(grossSalary - hraExemption - section80CCD2 - standardDeduction);
-  return { grossSalary, hraExemption, section80CCD2, standardDeduction, taxableSalary };
+  // Section 16(iii) professional tax deduction is only available under the old regime.
+  const professionalTaxDeduction = regime === "old" ? salary.professionalTax : 0;
+  const taxableSalary = clampMin0(
+    grossSalary - hraExemption - section80CCD2 - standardDeduction - professionalTaxDeduction
+  );
+  return { grossSalary, hraExemption, section80CCD2, standardDeduction, professionalTaxDeduction, taxableSalary };
 }
 
 export function computeRegime(profile: TaxProfile, regime: "old" | "new"): RegimeResult {
   const { salary, houseProperty, capitalGains, otherSources, business, deductions, ageBand } = profile;
 
   // --- Salary ---
-  const { grossSalary, hraExemption, section80CCD2, standardDeduction, taxableSalary } = computeSalaryHead(
-    salary,
-    regime
-  );
+  const { grossSalary, hraExemption, section80CCD2, standardDeduction, professionalTaxDeduction, taxableSalary } =
+    computeSalaryHead(salary, regime);
 
   // --- House property ---
   let housePropertyIncome: number;
@@ -221,6 +224,7 @@ export function computeRegime(profile: TaxProfile, regime: "old" | "new"): Regim
     regime,
     grossTotalIncome,
     standardDeduction,
+    professionalTaxDeduction,
     totalDeductionsClaimed,
     hraExemption,
     taxableIncome: round(taxableIncomeSlabPortion + capitalGains.stcgEquity + capitalGains.ltcgEquity + capitalGains.ltcgOther),

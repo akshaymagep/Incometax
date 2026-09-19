@@ -14,6 +14,8 @@
  *    flat list for the user to review, correct, and selectively apply — never applied silently.
  */
 
+import { parseDocument, type DetectedLine, type FieldRule } from "./documentParser";
+
 export type TargetField =
   | "salary.basicPlusDA"
   | "otherSources.savingsInterest"
@@ -27,12 +29,7 @@ export type TargetField =
   | "tdsAlreadyPaid"
   | "ignore";
 
-export interface DetectedLine {
-  id: string;
-  description: string;
-  amount: number;
-  suggestedField: TargetField;
-}
+export type { DetectedLine };
 
 export const TARGET_FIELD_LABELS: Record<TargetField, string> = {
   "salary.basicPlusDA": "Salary (basic + DA)",
@@ -48,13 +45,8 @@ export const TARGET_FIELD_LABELS: Record<TargetField, string> = {
   ignore: "Don't import this line",
 };
 
-interface Rule {
-  test: RegExp;
-  field: TargetField;
-}
-
 // Order matters — more specific patterns first.
-const RULES: Rule[] = [
+const RULES: FieldRule<TargetField>[] = [
   { test: /tds|tcs|tax deducted|tax collected/i, field: "tdsAlreadyPaid" },
   { test: /salary/i, field: "salary.basicPlusDA" },
   { test: /dividend/i, field: "otherSources.dividendIncome" },
@@ -74,87 +66,6 @@ const RULES: Rule[] = [
   { test: /rent|winning|lottery|professional|commission|other income/i, field: "otherSources.otherIncome" },
 ];
 
-function guessField(description: string): TargetField {
-  for (const rule of RULES) {
-    if (rule.test.test(description)) return rule.field;
-  }
-  return "ignore";
-}
-
-let idCounter = 0;
-function nextId(): string {
-  idCounter += 1;
-  return `ais-${idCounter}`;
-}
-
-function parseAmount(raw: string): number | null {
-  const cleaned = raw.replace(/[,₹\s]/g, "");
-  if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
-}
-
-function fromText(text: string): DetectedLine[] {
-  const lines = text.split(/\r?\n/);
-  const results: DetectedLine[] = [];
-  // Matches a line ending in a currency-looking number, capturing the leading description.
-  const lineRe = /^(.{4,}?)[\s:|]+(?:rs\.?|inr|₹)?\s*(-?[\d,]+(?:\.\d+)?)\s*$/i;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const match = trimmed.match(lineRe);
-    if (!match) continue;
-    const description = match[1].trim();
-    const amount = parseAmount(match[2]);
-    if (amount === null || amount <= 0) continue;
-    if (/^(page|total|sr\.?\s*no|s\.?\s*no)$/i.test(description)) continue;
-    results.push({ id: nextId(), description, amount, suggestedField: guessField(description) });
-  }
-  return results;
-}
-
-const AMOUNT_KEYS = /^(amount|amt|value|grossamount|totalamount|transactionamount)$/i;
-const DESCRIPTION_KEYS = /^(description|desc|category|type|informationdescription|particulars|infocategory|name)$/i;
-
-function fromJson(value: unknown, results: DetectedLine[]): void {
-  if (Array.isArray(value)) {
-    for (const item of value) fromJson(item, results);
-    return;
-  }
-  if (value && typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    let description: string | undefined;
-    let amount: number | undefined;
-    for (const [key, val] of Object.entries(obj)) {
-      if (description === undefined && DESCRIPTION_KEYS.test(key) && typeof val === "string") {
-        description = val;
-      }
-      if (amount === undefined) {
-        if (AMOUNT_KEYS.test(key)) {
-          if (typeof val === "number") amount = val;
-          else if (typeof val === "string") amount = parseAmount(val) ?? undefined;
-        }
-      }
-    }
-    if (description && amount !== undefined && amount > 0) {
-      results.push({ id: nextId(), description, amount, suggestedField: guessField(description) });
-    }
-    for (const val of Object.values(obj)) {
-      if (val && typeof val === "object") fromJson(val, results);
-    }
-  }
-}
-
-export function parseAisInput(raw: string): DetectedLine[] {
-  const trimmed = raw.trim();
-  if (!trimmed) return [];
-  try {
-    const parsed = JSON.parse(trimmed);
-    const results: DetectedLine[] = [];
-    fromJson(parsed, results);
-    if (results.length > 0) return results;
-  } catch {
-    // Not JSON — fall through to text parsing.
-  }
-  return fromText(trimmed);
+export function parseAisInput(raw: string): DetectedLine<TargetField>[] {
+  return parseDocument(raw, RULES, "ignore", "ais");
 }

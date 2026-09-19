@@ -1,39 +1,32 @@
 import { useMemo, useState } from "react";
 import { useTaxReturn } from "../context/TaxReturnContext";
 import type { TaxProfile } from "../types";
-import { parseAisInput, TARGET_FIELD_LABELS, type DetectedLine, type TargetField } from "../utils/aisParser";
+import { FORM16_TARGET_FIELD_LABELS, parseForm16Input, type Form16TargetField } from "../utils/form16Parser";
+import type { DetectedLine } from "../utils/documentParser";
 
 function formatINR(n: number): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 }
 
-function applyFieldDelta(profile: TaxProfile, field: TargetField, delta: number, replace: boolean): TaxProfile {
+function applyFieldDelta(profile: TaxProfile, field: Form16TargetField, delta: number, replace: boolean): TaxProfile {
   const combine = (current: number) => (replace ? delta : current + delta);
   switch (field) {
     case "salary.basicPlusDA":
       return { ...profile, salary: { ...profile.salary, basicPlusDA: combine(profile.salary.basicPlusDA) } };
-    case "otherSources.savingsInterest":
+    case "salary.professionalTax":
+      return { ...profile, salary: { ...profile.salary, professionalTax: combine(profile.salary.professionalTax) } };
+    case "deductions.section80C":
+      return { ...profile, deductions: { ...profile.deductions, section80C: combine(profile.deductions.section80C) } };
+    case "deductions.section80CCD1B":
       return {
         ...profile,
-        otherSources: { ...profile.otherSources, savingsInterest: combine(profile.otherSources.savingsInterest) },
+        deductions: { ...profile.deductions, section80CCD1B: combine(profile.deductions.section80CCD1B) },
       };
-    case "otherSources.fdInterest":
-      return { ...profile, otherSources: { ...profile.otherSources, fdInterest: combine(profile.otherSources.fdInterest) } };
-    case "otherSources.dividendIncome":
+    case "deductions.section80D_self":
       return {
         ...profile,
-        otherSources: { ...profile.otherSources, dividendIncome: combine(profile.otherSources.dividendIncome) },
+        deductions: { ...profile.deductions, section80D_self: combine(profile.deductions.section80D_self) },
       };
-    case "otherSources.otherIncome":
-      return { ...profile, otherSources: { ...profile.otherSources, otherIncome: combine(profile.otherSources.otherIncome) } };
-    case "capitalGains.stcgEquity":
-      return { ...profile, capitalGains: { ...profile.capitalGains, stcgEquity: combine(profile.capitalGains.stcgEquity) } };
-    case "capitalGains.ltcgEquity":
-      return { ...profile, capitalGains: { ...profile.capitalGains, ltcgEquity: combine(profile.capitalGains.ltcgEquity) } };
-    case "capitalGains.stcgOther":
-      return { ...profile, capitalGains: { ...profile.capitalGains, stcgOther: combine(profile.capitalGains.stcgOther) } };
-    case "capitalGains.ltcgOther":
-      return { ...profile, capitalGains: { ...profile.capitalGains, ltcgOther: combine(profile.capitalGains.ltcgOther) } };
     case "tdsAlreadyPaid":
       return { ...profile, tdsAlreadyPaid: combine(profile.tdsAlreadyPaid) };
     case "ignore":
@@ -42,17 +35,17 @@ function applyFieldDelta(profile: TaxProfile, field: TargetField, delta: number,
   }
 }
 
-export function AisImport() {
+export function Form16Import() {
   const { updateProfile } = useTaxReturn();
   const [open, setOpen] = useState(false);
   const [raw, setRaw] = useState("");
-  const [lines, setLines] = useState<DetectedLine<TargetField>[]>([]);
+  const [lines, setLines] = useState<DetectedLine<Form16TargetField>[]>([]);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [replace, setReplace] = useState(false);
   const [applied, setApplied] = useState(false);
 
   const analyze = () => {
-    const detected = parseAisInput(raw);
+    const detected = parseForm16Input(raw);
     setLines(detected);
     setApplied(false);
     const initialChecked: Record<string, boolean> = {};
@@ -66,12 +59,12 @@ export function AisImport() {
     reader.readAsText(file);
   };
 
-  const setLineField = (id: string, field: TargetField) => {
+  const setLineField = (id: string, field: Form16TargetField) => {
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, suggestedField: field } : l)));
   };
 
   const totalsByField = useMemo(() => {
-    const totals = new Map<TargetField, number>();
+    const totals = new Map<Form16TargetField, number>();
     for (const line of lines) {
       if (!checked[line.id] || line.suggestedField === "ignore") continue;
       totals.set(line.suggestedField, (totals.get(line.suggestedField) ?? 0) + line.amount);
@@ -94,9 +87,9 @@ export function AisImport() {
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 mb-6">
       <button className="flex items-center justify-between w-full text-left" onClick={() => setOpen((o) => !o)}>
         <div>
-          <h2 className="text-lg font-semibold">Import from your AIS</h2>
+          <h2 className="text-lg font-semibold">Import from your Form 16</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Paste your Annual Information Statement to auto-detect income, interest, and TDS figures.
+            Paste your Form 16 Part B to review your salary structure and pull in TDS/deduction figures.
           </p>
         </div>
         <span className="text-slate-400 text-xl">{open ? "−" : "+"}</span>
@@ -105,13 +98,12 @@ export function AisImport() {
       {open && (
         <div className="mt-4 space-y-4">
           <div className="text-sm text-slate-500 bg-slate-50 dark:bg-slate-900 rounded-md p-3">
-            There's no way for this (or any third-party) app to fetch your AIS automatically from a bare PAN — the
-            Income Tax Department requires you to log into the e-filing portal yourself. Download your AIS there
-            (<span className="font-medium">Services → Annual Information Statement (AIS)</span>) as JSON or PDF,
-            then either upload the JSON file or paste text copied from it below. If your AIS PDF is password
-            protected, the password is usually your <span className="font-medium">PAN in lowercase followed by your
-            date of birth as DDMMYYYY</span> (e.g. abcde1234f15051990). Everything below runs in your browser —
-            nothing is uploaded to any server.
+            Form 16 is issued directly by your employer (usually from the payroll portal, not password
+            protected). Paste the text from Part B below, or upload it as a .txt/.json file. This runs entirely
+            in your browser. Note: Form 16 usually reports one combined gross salary figure rather than the
+            separate Basic+DA / HRA / other-allowances split this app uses for its own HRA exemption
+            calculation — if you import "Gross Salary", check the Salary section afterwards so you don't lose
+            or double-count your HRA exemption.
           </div>
 
           <input
@@ -122,7 +114,7 @@ export function AisImport() {
           />
           <textarea
             className="w-full h-32 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-mono"
-            placeholder="Paste AIS JSON or copied text here…"
+            placeholder="Paste Form 16 Part B text or JSON here…"
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
           />
@@ -136,8 +128,8 @@ export function AisImport() {
 
           {lines.length === 0 && raw.trim() && (
             <p className="text-sm text-amber-600">
-              No amount/description pairs were detected. Try pasting the raw text rows from the AIS tables (each
-              line should end with a number), or upload the AIS JSON export instead.
+              No amount/description pairs were detected. Try pasting the raw text rows from Form 16 Part B (each
+              line should end with a number).
             </p>
           )}
 
@@ -148,7 +140,7 @@ export function AisImport() {
                   <thead>
                     <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
                       <th className="py-2 pr-2"></th>
-                      <th className="py-2 pr-2">Description (from AIS)</th>
+                      <th className="py-2 pr-2">Description (from Form 16)</th>
                       <th className="py-2 pr-2">Amount</th>
                       <th className="py-2 pr-2">Add to</th>
                     </tr>
@@ -171,9 +163,9 @@ export function AisImport() {
                           <select
                             className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs"
                             value={line.suggestedField}
-                            onChange={(e) => setLineField(line.id, e.target.value as TargetField)}
+                            onChange={(e) => setLineField(line.id, e.target.value as Form16TargetField)}
                           >
-                            {Object.entries(TARGET_FIELD_LABELS).map(([value, label]) => (
+                            {Object.entries(FORM16_TARGET_FIELD_LABELS).map(([value, label]) => (
                               <option key={value} value={value}>
                                 {label}
                               </option>
@@ -192,18 +184,11 @@ export function AisImport() {
                   <ul className="list-disc ml-5 text-slate-600 dark:text-slate-300">
                     {Array.from(totalsByField.entries()).map(([field, amount]) => (
                       <li key={field}>
-                        {TARGET_FIELD_LABELS[field]}: {replace ? "set to" : "+"} {formatINR(amount)}
+                        {FORM16_TARGET_FIELD_LABELS[field]}: {replace ? "set to" : "+"} {formatINR(amount)}
                       </li>
                     ))}
                   </ul>
                 </div>
-              )}
-
-              {Array.from(totalsByField.keys()).some((f) => f.startsWith("capitalGains.")) && (
-                <p className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-slate-900 rounded-md p-3">
-                  Your AIS shows capital gains. ITR-1 doesn't cover capital gains — once you save, the Summary and
-                  Filing export pages will recommend <strong>ITR-2</strong> instead.
-                </p>
               )}
 
               <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">

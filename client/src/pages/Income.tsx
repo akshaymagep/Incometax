@@ -1,17 +1,26 @@
 import { useNavigate } from "react-router-dom";
 import { AisImport } from "../components/AisImport";
-import { NumberField, Section, ToggleField } from "../components/FormControls";
+import { Form16Import } from "../components/Form16Import";
+import { NumberField, Section, SelectField, ToggleField } from "../components/FormControls";
 import { useTaxReturn } from "../context/TaxReturnContext";
+import type { PresumptiveScheme } from "../types";
+import { computePresumptiveDetails } from "../utils/presumptive";
+
+function formatINR(n: number): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+}
 
 export function Income() {
   const { profile, updateProfile, save, saving } = useTaxReturn();
   const navigate = useNavigate();
+  const presumptive = computePresumptiveDetails(profile.business);
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Income Details</h1>
 
       <AisImport />
+      <Form16Import />
 
       <Section title="Salary" description="Figures as per your Form 16 / payslips for the financial year.">
         <NumberField
@@ -45,6 +54,12 @@ export function Income() {
           value={profile.salary.employerNpsContribution}
           onChange={(v) => updateProfile((p) => ({ ...p, salary: { ...p.salary, employerNpsContribution: v } }))}
           hint="Eligible for deduction under Section 80CCD(2) in both regimes, within limits"
+        />
+        <NumberField
+          label="Professional tax paid (annual)"
+          value={profile.salary.professionalTax}
+          onChange={(v) => updateProfile((p) => ({ ...p, salary: { ...p.salary, professionalTax: v } }))}
+          hint="Section 16(iii) — deductible only under the old regime"
         />
       </Section>
 
@@ -130,12 +145,70 @@ export function Income() {
         />
       </Section>
 
-      <Section title="Business / Profession" description="Simplified net-profit entry (presumptive schemes not modeled).">
-        <NumberField
-          label="Net profit"
-          value={profile.business.netProfit}
-          onChange={(v) => updateProfile((p) => ({ ...p, business: { netProfit: v } }))}
+      <Section
+        title="Business / Profession"
+        description="For regular books of account, just enter net profit. To opt for presumptive taxation under Section 44AD (business) or 44ADA (profession) — which uses ITR-4 instead of ITR-3 — fill in the turnover details below."
+      >
+        <ToggleField
+          label="Opt for presumptive taxation (Sec 44AD / 44ADA)"
+          checked={profile.business.presumptiveScheme !== "none"}
+          onChange={(checked) =>
+            updateProfile((p) => ({
+              ...p,
+              business: { ...p.business, presumptiveScheme: checked ? "44AD" : "none" },
+            }))
+          }
         />
+        {profile.business.presumptiveScheme !== "none" && (
+          <>
+            <SelectField<PresumptiveScheme>
+              label="Scheme"
+              value={profile.business.presumptiveScheme}
+              onChange={(scheme) => updateProfile((p) => ({ ...p, business: { ...p.business, presumptiveScheme: scheme } }))}
+              options={[
+                { value: "44AD", label: "Section 44AD — business" },
+                { value: "44ADA", label: "Section 44ADA — profession" },
+              ]}
+            />
+            <NumberField
+              label="Annual turnover / gross receipts"
+              value={profile.business.turnoverOrGrossReceipts}
+              onChange={(v) => updateProfile((p) => ({ ...p, business: { ...p.business, turnoverOrGrossReceipts: v } }))}
+            />
+            <ToggleField
+              label="At least 95% of receipts were via banking/digital channels"
+              checked={profile.business.digitalReceiptsMostly}
+              onChange={(v) => updateProfile((p) => ({ ...p, business: { ...p.business, digitalReceiptsMostly: v } }))}
+              hint="Raises the turnover limit and lowers the minimum profit rate for Section 44AD"
+            />
+          </>
+        )}
+        <NumberField
+          label="Net profit (declared)"
+          value={profile.business.netProfit}
+          onChange={(v) => updateProfile((p) => ({ ...p, business: { ...p.business, netProfit: v } }))}
+        />
+        {presumptive && (
+          <div className="sm:col-span-2 text-sm rounded-md p-3 bg-slate-50 dark:bg-slate-900">
+            <p>
+              Minimum profit to declare under Section {presumptive.scheme} ({Math.round(presumptive.rate * 100)}% of
+              turnover/receipts): <strong>{formatINR(presumptive.minimumPresumptiveProfit)}</strong>
+            </p>
+            {!presumptive.withinTurnoverLimit && (
+              <p className="text-amber-700 dark:text-amber-400 mt-1">
+                Turnover/receipts exceed the {formatINR(presumptive.turnoverLimit)} limit for Section{" "}
+                {presumptive.scheme} — presumptive taxation isn't available; ITR-3 with regular books of account
+                will be required instead.
+              </p>
+            )}
+            {presumptive.withinTurnoverLimit && !presumptive.meetsMinimumProfit && (
+              <p className="text-amber-700 dark:text-amber-400 mt-1">
+                Declared profit is below the minimum — presumptive taxation requires declaring at least this
+                amount, otherwise ITR-3 with regular books of account applies instead.
+              </p>
+            )}
+          </div>
+        )}
       </Section>
 
       <Section title="Taxes already paid" description="So we can tell you the balance payable or refund due.">
