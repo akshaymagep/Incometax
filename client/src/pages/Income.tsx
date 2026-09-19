@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { AisImport } from "../components/AisImport";
 import { NumberField, Section, ToggleField } from "../components/FormControls";
 import { useTaxReturn } from "../context/TaxReturnContext";
 
@@ -9,6 +10,8 @@ export function Income() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Income Details</h1>
+
+      <AisImport />
 
       <Section title="Salary" description="Figures as per your Form 16 / payslips for the financial year.">
         <NumberField

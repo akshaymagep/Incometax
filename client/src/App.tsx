@@ -10,6 +10,7 @@ import { Login } from "./pages/Login";
 import { PersonalInfo } from "./pages/PersonalInfo";
 import { Register } from "./pages/Register";
 import { Summary } from "./pages/Summary";
+import { TaxPlanning } from "./pages/TaxPlanning";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/income" element={<Income />} />
           <Route path="/deductions" element={<Deductions />} />
           <Route path="/summary" element={<Summary />} />
+          <Route path="/planning" element={<TaxPlanning />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

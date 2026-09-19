@@ -7,6 +7,7 @@ const steps = [
   { to: "/income", title: "Income", description: "Salary, house property, capital gains, other income." },
   { to: "/deductions", title: "Deductions", description: "80C, 80D, and other tax-saving investments." },
   { to: "/summary", title: "Summary", description: "Compare old vs new regime and see your tax liability." },
+  { to: "/planning", title: "Planning", description: "Unused deduction room and a projection for next year." },
 ];
 
 export function Dashboard() {

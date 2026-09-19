@@ -70,6 +70,7 @@ export const api = {
   sendChat: (message: string, financialYear?: string) =>
     request<{ reply: string }>("/ai/chat", { method: "POST", body: JSON.stringify({ message, financialYear }) }),
   suggestDeductions: (fy: string) => request<{ suggestions: string }>(`/ai/suggest-deductions/${fy}`),
+  savingsPlan: (fy: string) => request<{ plan: string }>(`/ai/savings-plan/${fy}`),
 };
 
 export { ApiError };

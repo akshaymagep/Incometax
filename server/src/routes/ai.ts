@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
-import { chatWithAssistant, suggestDeductions } from "../services/aiAssistant.js";
+import { chatWithAssistant, generateSavingsPlan, suggestDeductions } from "../services/aiAssistant.js";
 import { compareRegimes } from "../services/taxEngine.js";
 import type { TaxProfile } from "../types.js";
 
@@ -71,6 +71,21 @@ aiRouter.get("/suggest-deductions/:financialYear", async (req: AuthedRequest, re
   try {
     const suggestions = await suggestDeductions(profile, comparison);
     res.json({ suggestions });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "AI assistant is unavailable";
+    res.status(502).json({ error: message });
+  }
+});
+
+aiRouter.get("/savings-plan/:financialYear", async (req: AuthedRequest, res) => {
+  const profile = loadProfile(req.userId as number, req.params.financialYear);
+  if (!profile) {
+    return res.status(404).json({ error: "No return found for this financial year. Save your income details first." });
+  }
+  const comparison = compareRegimes(profile);
+  try {
+    const plan = await generateSavingsPlan(profile, comparison);
+    res.json({ plan });
   } catch (err) {
     const message = err instanceof Error ? err.message : "AI assistant is unavailable";
     res.status(502).json({ error: message });

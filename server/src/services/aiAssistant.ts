@@ -88,6 +88,35 @@ export async function chatWithAssistant(
   return textBlock && textBlock.type === "text" ? textBlock.text : "";
 }
 
+export async function generateSavingsPlan(profile: TaxProfile, comparison: ComparisonResult): Promise<string> {
+  const anthropic = getClient();
+  const contextBlock = profileContextBlock(profile, comparison);
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 1200,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `${contextBlock}\n\nWrite a forward-looking tax-saving plan for the NEXT financial year, assuming
+similar income. Cover, briefly:
+1. Which deductions/investments still have unused headroom this year (if the old regime applies) and roughly how
+   much tax that headroom is worth at this income level.
+2. Two or three concrete, common actions to consider for next year (e.g. ELSS/PPF timing, NPS 80CCD(1B), health
+   insurance, HRA/rent planning, advance tax installment awareness) — only ones relevant to this profile.
+3. One sentence on whether it's worth re-checking the regime choice next year if income or deductions change
+   significantly.
+Keep it under 220 words, use a short bulleted list, and don't repeat disclaimers already covered elsewhere — just
+the plan itself.`,
+      },
+    ],
+  });
+
+  const textBlock = response.content.find((block) => block.type === "text");
+  return textBlock && textBlock.type === "text" ? textBlock.text : "";
+}
+
 export async function suggestDeductions(profile: TaxProfile, comparison: ComparisonResult): Promise<string> {
   const anthropic = getClient();
   const contextBlock = profileContextBlock(profile, comparison);

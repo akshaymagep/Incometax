@@ -44,6 +44,25 @@ Incometax/
      proprietary checksum/digest block) changes every assessment year and isn't reproduced here,
      so **do not upload it directly** — use it to cross-check figures against what you enter in
      the official utility or portal.
+- **AIS import** (`client/src/utils/aisParser.ts`, "Import from your AIS" panel on the Income
+  page): there is no government API that lets an app fetch your Annual Information Statement from
+  just your PAN — you have to download it yourself from the e-filing portal (Services → Annual
+  Information Statement). This feature makes using it fast once you have it: paste the AIS JSON
+  export or text copied from the PDF, and the app detects `{description, amount}` pairs, guesses
+  which income field each belongs to (salary, savings/FD interest, dividends, capital gains, TDS),
+  and shows a review table where you confirm/correct the mapping before anything is applied to
+  your return. It runs entirely in the browser — nothing is uploaded to the server. Importing data
+  that reveals a new income type (e.g. capital gains) immediately updates the recommended ITR form
+  once saved.
+- **Tax Planning** (`client/src/pages/TaxPlanning.tsx`, `client/src/utils/taxPlanning.ts`, `/planning`
+  route): a forward-looking section with
+  1. remaining headroom in 80C/80CCD(1B)/80D against this year's statutory caps, and the
+     approximate tax it's worth at your marginal rate;
+  2. a one-click check for whether maxing out old-regime deductions would flip the regime
+     recommendation (calls the real `/compute` endpoint, not a client-side approximation);
+  3. a "what-if" projector for next year (expected salary growth, planned extra 80C/80CCD(1B))
+     using this year's slab rules as a stand-in; and
+  4. an AI-generated short savings plan for next year.
 
 ## Setup
 
@@ -79,7 +98,7 @@ server proxies `/api/*` to the Express backend.
 ## Testing
 
 ```bash
-npm test        # runs the tax-engine unit tests (vitest)
+npm test        # runs server (tax engine, filing export) and client (AIS parser, tax planning) unit tests
 ```
 
 ## Building for production

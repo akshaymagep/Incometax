@@ -8,6 +8,7 @@ const navItems = [
   { to: "/income", label: "Income" },
   { to: "/deductions", label: "Deductions" },
   { to: "/summary", label: "Summary" },
+  { to: "/planning", label: "Planning" },
 ];
 
 export function Layout() {
