@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { buildDraftItr1, buildFilingWorksheet, determineApplicableForm } from "../services/itrExport.js";
 import { compareRegimes } from "../services/taxEngine.js";
 import type { TaxProfile } from "../types.js";
 
@@ -10,9 +11,17 @@ returnsRouter.use(requireAuth);
 
 const num = () => z.number().finite().nonnegative();
 
+const panRegex = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
+
 const taxProfileSchema = z.object({
   financialYear: z.string().min(4),
   ageBand: z.enum(["below60", "60to80", "above80"]),
+  personalInfo: z.object({
+    fullName: z.string().max(200),
+    pan: z.string().refine((v) => v === "" || panRegex.test(v), "PAN must look like ABCDE1234F"),
+    dateOfBirth: z.string().max(20),
+    residentialStatus: z.enum(["resident", "nonResident", "notOrdinarilyResident"]),
+  }),
   salary: z.object({
     basicPlusDA: num(),
     hraReceived: num(),
@@ -113,6 +122,21 @@ returnsRouter.post("/:financialYear/compute", (req: AuthedRequest, res) => {
   }
   const comparison = compareRegimes(parsed.data as TaxProfile);
   res.json({ comparison });
+});
+
+returnsRouter.get("/:financialYear/export", (req: AuthedRequest, res) => {
+  const row = db
+    .prepare("SELECT profile_json FROM tax_returns WHERE user_id = ? AND financial_year = ?")
+    .get(req.userId, req.params.financialYear) as { profile_json: string } | undefined;
+  if (!row) return res.status(404).json({ error: "No return found for this financial year. Save your details first." });
+
+  const profile = JSON.parse(row.profile_json) as TaxProfile;
+  const comparison = compareRegimes(profile);
+  const applicability = determineApplicableForm(profile);
+  const worksheet = buildFilingWorksheet(profile, comparison);
+  const draftItr1 = buildDraftItr1(profile, comparison);
+
+  res.json({ applicability, worksheet, draftItr1 });
 });
 
 returnsRouter.delete("/:financialYear", (req: AuthedRequest, res) => {

@@ -1,4 +1,4 @@
-import type { ComparisonResult, TaxProfile } from "../types";
+import type { ComparisonResult, FilingExport, TaxProfile } from "../types";
 
 const TOKEN_KEY = "incometax_token";
 
@@ -63,6 +63,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(profile),
     }),
+
+  exportFiling: (fy: string) => request<FilingExport>(`/returns/${fy}/export`),
 
   chatHistory: () => request<{ messages: { role: "user" | "assistant"; content: string; created_at: string }[] }>("/ai/chat"),
   sendChat: (message: string, financialYear?: string) =>

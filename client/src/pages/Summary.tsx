@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { api, ApiError } from "../api/client";
 import { useTaxReturn } from "../context/TaxReturnContext";
-import type { RegimeResult } from "../types";
+import type { FilingExport, RegimeResult } from "../types";
 
 function formatINR(n: number): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -70,6 +71,101 @@ function Row({
   );
 }
 
+function downloadJson(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function FilingExportSection() {
+  const { financialYear, save } = useTaxReturn();
+  const [result, setResult] = useState<FilingExport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await save();
+      const res = await api.exportFiling(financialYear);
+      setResult(res);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not generate the filing export.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 mb-6">
+      <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
+        <h2 className="text-lg font-semibold">Filing export</h2>
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="rounded-md bg-brand-600 text-white px-4 py-2 text-sm font-semibold hover:bg-brand-700 disabled:opacity-50"
+        >
+          {loading ? "Generating…" : "Generate filing export"}
+        </button>
+      </div>
+
+      <p className="text-sm text-slate-500 mb-4">
+        Produces a worksheet organized by the same schedule names the ITR forms and e-filing portal use (Schedule
+        S/HP/CG/OS/VI-A, Part B-TI/TTI), so you can transcribe it quickly and correctly. This app cannot submit
+        anything to the Income Tax Department directly — you still file through{" "}
+        <span className="font-medium">incometax.gov.in</span> or the official offline utility.
+      </p>
+
+      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+      {result && (
+        <div className="space-y-4">
+          <div className="text-sm bg-slate-50 dark:bg-slate-900 rounded-md p-3">
+            Based on what you entered, the applicable form looks like{" "}
+            <strong>{result.applicability.form}</strong>.
+            <ul className="list-disc ml-5 mt-1 text-slate-500">
+              {result.applicability.reasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => downloadJson(`filing-worksheet-${financialYear}.json`, result.worksheet)}
+              className="rounded-md border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700"
+            >
+              Download filing worksheet (JSON)
+            </button>
+            {result.draftItr1 && (
+              <button
+                onClick={() => downloadJson(`draft-itr1-${financialYear}.json`, result.draftItr1)}
+                className="rounded-md border border-amber-400 text-amber-700 dark:text-amber-400 px-4 py-2 text-sm font-medium hover:bg-amber-50 dark:hover:bg-slate-700"
+              >
+                Download draft ITR-1 JSON (experimental)
+              </button>
+            )}
+          </div>
+
+          {result.draftItr1 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-slate-900 rounded-md p-3">
+              The draft ITR-1 JSON approximates the offline utility's structure but is <strong>not guaranteed</strong>{" "}
+              to match the current assessment year's exact schema or pass the utility's validation. Treat it as a
+              cross-check of your numbers, not a ready-to-upload file — build the real submission using the official
+              portal or offline utility.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Summary() {
   const { comparison, recompute, profile } = useTaxReturn();
 
@@ -101,6 +197,10 @@ export function Summary() {
           </div>
         </>
       )}
+
+      <div className="mt-6">
+        <FilingExportSection />
+      </div>
 
       <div className="mt-8 text-xs text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-4">
         This computation is a simplified planning estimate for FY 2024-25 (AY 2025-26). It does not account for

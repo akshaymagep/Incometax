@@ -33,6 +33,17 @@ Incometax/
   context so answers and deduction suggestions are specific to them.
 - **Frontend** (`client/src`): a guided flow (Personal Info → Income → Deductions → Summary) plus
   a floating chat widget available on every page.
+- **Filing export** (`server/src/services/itrExport.ts`, "Filing export" section on the Summary
+  page): generates
+  1. a **filing worksheet** (JSON) that organizes your numbers under the same schedule names the
+     ITR forms and e-filing portal use (Schedule S/HP/CG/OS/VI-A, Part B-TI/TTI), for fast, correct
+     transcription into the portal or offline utility — always safe to generate; and
+  2. for simple resident-salaried profiles (no capital gains, no business income, income routed
+     through ITR-1), a **best-effort draft ITR-1 JSON** shaped like the offline utility's schema.
+     This draft is explicitly labeled experimental: the Department's exact schema (including a
+     proprietary checksum/digest block) changes every assessment year and isn't reproduced here,
+     so **do not upload it directly** — use it to cross-check figures against what you enter in
+     the official utility or portal.
 
 ## Setup
 
@@ -84,7 +95,8 @@ environment variables) behind it, or behind a reverse proxy that forwards `/api`
 
 - Tax profiles are stored in a local SQLite database (`server/data/incometax.sqlite`), scoped per
   authenticated user.
-- The app deliberately does not collect PAN, Aadhaar, or bank account numbers — the AI system
-  prompt also instructs the assistant not to request them.
+- Name and PAN are optional and stored locally only, to prefill the filing worksheet/draft export;
+  the app never transmits them anywhere else. Aadhaar and bank account numbers are not collected at
+  all, and the AI system prompt instructs the assistant not to request them.
 - Chat history is stored per user so the assistant has conversational context; it can be cleared
   via `DELETE /api/ai/chat`.

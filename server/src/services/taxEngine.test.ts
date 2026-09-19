@@ -6,6 +6,7 @@ function blankProfile(overrides: Partial<TaxProfile> = {}): TaxProfile {
   return {
     financialYear: "2024-25",
     ageBand: "below60",
+    personalInfo: { fullName: "Test User", pan: "", dateOfBirth: "", residentialStatus: "resident" },
     salary: {
       basicPlusDA: 0,
       hraReceived: 0,

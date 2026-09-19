@@ -1,4 +1,12 @@
 export type AgeBand = "below60" | "60to80" | "above80";
+export type ResidentialStatus = "resident" | "nonResident" | "notOrdinarilyResident";
+
+export interface PersonalInfo {
+  fullName: string;
+  pan: string;
+  dateOfBirth: string;
+  residentialStatus: ResidentialStatus;
+}
 
 export interface SalaryIncome {
   basicPlusDA: number;
@@ -49,6 +57,7 @@ export interface Deductions {
 export interface TaxProfile {
   financialYear: string;
   ageBand: AgeBand;
+  personalInfo: PersonalInfo;
   salary: SalaryIncome;
   houseProperty: HouseProperty;
   capitalGains: CapitalGains;
@@ -86,10 +95,22 @@ export interface ComparisonResult {
   savingsAmount: number;
 }
 
+export interface FormApplicability {
+  form: "ITR-1" | "ITR-2" | "ITR-3";
+  reasons: string[];
+}
+
+export interface FilingExport {
+  applicability: FormApplicability;
+  worksheet: Record<string, unknown>;
+  draftItr1: Record<string, unknown> | null;
+}
+
 export function blankTaxProfile(financialYear: string): TaxProfile {
   return {
     financialYear,
     ageBand: "below60",
+    personalInfo: { fullName: "", pan: "", dateOfBirth: "", residentialStatus: "resident" },
     salary: {
       basicPlusDA: 0,
       hraReceived: 0,

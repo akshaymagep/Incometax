@@ -1,4 +1,12 @@
 export type AgeBand = "below60" | "60to80" | "above80";
+export type ResidentialStatus = "resident" | "nonResident" | "notOrdinarilyResident";
+
+export interface PersonalInfo {
+  fullName: string;
+  pan: string; // stored locally only; used to prefill the filing worksheet export
+  dateOfBirth: string; // ISO yyyy-mm-dd
+  residentialStatus: ResidentialStatus;
+}
 
 export interface SalaryIncome {
   basicPlusDA: number;
@@ -49,6 +57,7 @@ export interface Deductions {
 export interface TaxProfile {
   financialYear: string; // e.g. "2024-25"
   ageBand: AgeBand;
+  personalInfo: PersonalInfo;
   salary: SalaryIncome;
   houseProperty: HouseProperty;
   capitalGains: CapitalGains;

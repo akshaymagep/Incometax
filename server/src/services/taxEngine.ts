@@ -111,10 +111,16 @@ function chapterVIATotal(d: Deductions, ageBand: AgeBand): number {
   );
 }
 
-export function computeRegime(profile: TaxProfile, regime: "old" | "new"): RegimeResult {
-  const { salary, houseProperty, capitalGains, otherSources, business, deductions, ageBand } = profile;
+export interface SalaryHeadResult {
+  grossSalary: number;
+  hraExemption: number;
+  section80CCD2: number;
+  standardDeduction: number;
+  /** "Income chargeable under the head Salaries" — after HRA exemption, 80CCD(2) and standard deduction. */
+  taxableSalary: number;
+}
 
-  // --- Salary ---
+export function computeSalaryHead(salary: SalaryIncome, regime: "old" | "new"): SalaryHeadResult {
   const grossSalary =
     salary.basicPlusDA + salary.otherAllowances + salary.hraReceived + salary.employerNpsContribution;
   const hraExemption = regime === "old" ? calcHRAExemption(salary) : 0;
@@ -122,6 +128,17 @@ export function computeRegime(profile: TaxProfile, regime: "old" | "new"): Regim
   const section80CCD2 = Math.min(salary.employerNpsContribution, npsCap);
   const standardDeduction = grossSalary > 0 ? (regime === "new" ? 75000 : 50000) : 0;
   const taxableSalary = clampMin0(grossSalary - hraExemption - section80CCD2 - standardDeduction);
+  return { grossSalary, hraExemption, section80CCD2, standardDeduction, taxableSalary };
+}
+
+export function computeRegime(profile: TaxProfile, regime: "old" | "new"): RegimeResult {
+  const { salary, houseProperty, capitalGains, otherSources, business, deductions, ageBand } = profile;
+
+  // --- Salary ---
+  const { grossSalary, hraExemption, section80CCD2, standardDeduction, taxableSalary } = computeSalaryHead(
+    salary,
+    regime
+  );
 
   // --- House property ---
   let housePropertyIncome: number;
